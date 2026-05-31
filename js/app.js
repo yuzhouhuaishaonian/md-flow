@@ -28,7 +28,13 @@
   let editor;
   let renderTimer;
   let renderLock = Promise.resolve();
-  let currentFlowchart = { source: "", mode: "auto", message: "" };
+  let currentFlowchart = { source: "", extraSources: [], mode: "auto", message: "" };
+
+  const BADGE_LABELS = {
+    auto: "自动转换",
+    mermaid: "Mermaid",
+    sql: "SQL 表结构",
+  };
 
   const previewEl = document.getElementById("preview");
   const diagramStatusEl = document.getElementById("diagram-status");
@@ -120,7 +126,7 @@
     return renderLock;
   }
 
-  function buildPreviewShell(mode, message, source) {
+  function buildPreviewShell(mode, message, sources) {
     previewEl.innerHTML = "";
 
     const bodyWrap = document.createElement("div");
@@ -133,25 +139,45 @@
     const header = document.createElement("div");
     header.className = "flowchart-header";
     header.innerHTML =
-      `<span class="flowchart-badge ${mode}">${mode === "auto" ? "自动转换" : "Mermaid"}</span>` +
+      `<span class="flowchart-badge ${mode}">${BADGE_LABELS[mode] || mode}</span>` +
       `<span class="flowchart-hint">${escapeHtml(message)}</span>`;
 
     const block = document.createElement("div");
     block.className = "mermaid-block";
 
-    const renderTarget = document.createElement("div");
-    renderTarget.className = "flowchart-render-target";
-    block.appendChild(renderTarget);
+    const renderTargets = [];
+    sources.forEach((source, index) => {
+      const panel = document.createElement("div");
+      panel.className = "flowchart-panel";
+
+      if (sources.length > 1) {
+        const title = document.createElement("div");
+        title.className = "flowchart-panel-title";
+        title.textContent = index === 0 ? "表结构 (erDiagram)" : "索引与约束";
+        panel.appendChild(title);
+      }
+
+      const renderTarget = document.createElement("div");
+      renderTarget.className = "flowchart-render-target";
+      panel.appendChild(renderTarget);
+      block.appendChild(panel);
+      renderTargets.push({ renderTarget, source });
+    });
 
     const details = document.createElement("details");
     details.className = "mermaid-source-panel";
+    const sourceText = sources.join("\n\n---\n\n");
     details.innerHTML =
-      `<summary>查看生成的 Mermaid 代码</summary><pre><code>${escapeHtml(source)}</code></pre>`;
+      `<summary>查看生成的 Mermaid 代码</summary><pre><code>${escapeHtml(sourceText)}</code></pre>`;
 
     flowchartWrap.append(header, block, details);
     previewEl.appendChild(flowchartWrap);
 
-    return { bodyWrap, renderTarget };
+    return { bodyWrap, renderTargets };
+  }
+
+  function getDiagramSources(flowchart) {
+    return [flowchart.source].concat(flowchart.extraSources || []).filter(Boolean);
   }
 
   async function updatePreview() {
@@ -162,10 +188,11 @@
       currentFlowchart = buildFlowchartFromMd(md);
       diagramStatusEl.textContent = currentFlowchart.message;
 
-      const { bodyWrap, renderTarget } = buildPreviewShell(
+      const sources = getDiagramSources(currentFlowchart);
+      const { bodyWrap, renderTargets } = buildPreviewShell(
         currentFlowchart.mode,
         currentFlowchart.message,
-        currentFlowchart.source
+        sources
       );
 
       const bodyHtml = renderMarkdownBody(md);
@@ -175,8 +202,10 @@
         bodyWrap.remove();
       }
 
-      renderTarget.innerHTML = `<p class="render-loading">正在生成流程图…</p>`;
-      await renderMermaidToElement(currentFlowchart.source, renderTarget);
+      for (const item of renderTargets) {
+        item.renderTarget.innerHTML = `<p class="render-loading">正在生成流程图…</p>`;
+        await renderMermaidToElement(item.source, item.renderTarget);
+      }
     } catch (err) {
       previewEl.innerHTML =
         `<pre class="render-error">预览失败：\n${escapeHtml(String(err.message || err))}</pre>`;
@@ -203,7 +232,7 @@
   }
 
   function renderMarkdownBody(md) {
-    const bodyMd = md.replace(/```\s*mermaid[\s\S]*?```/gi, "").trim();
+    const bodyMd = MdToFlowchart.stripDiagramContent(md);
     if (!bodyMd) return "";
 
     return marked.parse(bodyMd, { gfm: true, breaks: true });
@@ -211,6 +240,10 @@
 
   function getFlowchartSvg() {
     return previewEl.querySelector(".flowchart-render-target svg");
+  }
+
+  function getAllFlowchartSvgs() {
+    return Array.from(previewEl.querySelectorAll(".flowchart-render-target svg"));
   }
 
   function svgToBlob(svgEl) {
@@ -310,6 +343,66 @@
     return renderMermaidToElement(currentFlowchart.source, offscreenEl);
   }
 
+  async function renderAllDiagramsForExport() {
+    const sources = getDiagramSources(currentFlowchart);
+    if (sources.length <= 1) {
+      let svg = getFlowchartSvg();
+      if (!svg) {
+        await updatePreview();
+        svg = getFlowchartSvg();
+      }
+      if (!svg) {
+        offscreenEl.innerHTML = "";
+        svg = await renderMermaidToElement(currentFlowchart.source, offscreenEl);
+      }
+      return svg ? [svg] : [];
+    }
+
+    let svgs = getAllFlowchartSvgs();
+    if (svgs.length === sources.length) return svgs;
+
+    await updatePreview();
+    svgs = getAllFlowchartSvgs();
+    if (svgs.length === sources.length) return svgs;
+
+    offscreenEl.innerHTML = "";
+    const rendered = [];
+    for (const source of sources) {
+      const container = document.createElement("div");
+      offscreenEl.appendChild(container);
+      const svg = await renderMermaidToElement(source, container);
+      if (svg) rendered.push(svg);
+    }
+    return rendered;
+  }
+
+  function combineSvgsVertically(svgs, gap) {
+    gap = gap || 24;
+    if (svgs.length === 1) return prepareSvgForExport(svgs[0]);
+
+    const prepared = svgs.map((svg) => prepareSvgForExport(svg));
+    const totalWidth = Math.max(...prepared.map((item) => item.width));
+    const totalHeight =
+      prepared.reduce((sum, item) => sum + item.height, 0) + gap * (prepared.length - 1);
+
+    const combined = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    combined.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    combined.setAttribute("width", String(totalWidth));
+    combined.setAttribute("height", String(totalHeight));
+    combined.setAttribute("viewBox", `0 0 ${totalWidth} ${totalHeight}`);
+
+    let offsetY = 0;
+    prepared.forEach((item) => {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      group.setAttribute("transform", `translate(${(totalWidth - item.width) / 2}, ${offsetY})`);
+      group.appendChild(item.clone);
+      combined.appendChild(group);
+      offsetY += item.height + gap;
+    });
+
+    return { clone: combined, width: totalWidth, height: totalHeight };
+  }
+
   async function generateImage(format) {
     const buttons = {
       png: document.getElementById("btn-generate"),
@@ -326,31 +419,26 @@
     try {
       currentFlowchart = buildFlowchartFromMd(editor.getValue());
 
-      let svg = getFlowchartSvg();
-      if (!svg) {
-        await updatePreview();
-        svg = getFlowchartSvg();
-      }
-      if (!svg) {
-        offscreenEl.innerHTML = "";
-        svg = await renderMermaidToElement(currentFlowchart.source, offscreenEl);
-      }
-      if (!svg) {
+      const svgs = await renderAllDiagramsForExport();
+      if (svgs.length === 0) {
         showToast("无法生成流程图，请检查 Markdown 内容");
         return;
       }
 
+      const combined = combineSvgsVertically(svgs);
+      const exportSvg = combined.clone;
+
       const ts = getTimestamp();
       if (format === "png") {
-        const blob = await svgToPng(svg, 2);
+        const blob = await svgToPng(exportSvg, 2);
         downloadBlob(blob, `flowchart-${ts}.png`);
         showToast("已生成并下载 PNG 图片");
       } else if (format === "svg") {
-        downloadBlob(svgToBlob(svg), `flowchart-${ts}.svg`);
+        downloadBlob(svgToBlob(exportSvg), `flowchart-${ts}.svg`);
         showToast("已导出 SVG 图片");
       } else if (format === "pdf") {
         const { jsPDF } = window.jspdf;
-        const pngBlob = await svgToPng(svg, 2);
+        const pngBlob = await svgToPng(exportSvg, 2);
         const dataUrl = await new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result);
@@ -434,9 +522,49 @@
   document.getElementById("btn-export-svg").addEventListener("click", () => generateImage("svg"));
   document.getElementById("btn-export-pdf").addEventListener("click", () => generateImage("pdf"));
   document.getElementById("btn-save-md").addEventListener("click", saveMarkdown);
+  const SQL_TABLE_MD = `# users 表示例
+
+演示用用户表，用于测试 SQL → erDiagram 自动转换。
+
+\`\`\`sql
+CREATE TABLE \`users\` (
+  \`id\` int NOT NULL AUTO_INCREMENT,
+  \`username\` varchar(50) NOT NULL COMMENT 'login name',
+  \`email\` varchar(100) NOT NULL COMMENT 'user email',
+  \`status\` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'active / inactive',
+  \`role\` varchar(20) NOT NULL DEFAULT 'member' COMMENT 'admin / member',
+  \`created_at\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (\`id\`) USING BTREE,
+  UNIQUE KEY \`users_idx_email\` (\`email\`) USING BTREE,
+  KEY \`users_idx_status_role\` (\`status\`, \`role\`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Demo user table for diagram preview';
+\`\`\`
+`;
+
+  async function insertSqlTemplate() {
+    try {
+      const resp = await fetch("examples/sample-table.md");
+      if (resp.ok) {
+        editor.setValue(await resp.text());
+        updatePreview();
+        showToast("已加载表结构示例");
+        return;
+      }
+    } catch (err) {
+      // file:// 或离线时回退到内置示例
+    }
+    editor.setValue(SQL_TABLE_MD);
+    updatePreview();
+    showToast("已加载表结构示例");
+  }
+
   document.getElementById("btn-insert-template").addEventListener("click", () => {
     editor.setValue(DEFAULT_MD);
     updatePreview();
+  });
+  document.getElementById("btn-insert-sql-template").addEventListener("click", () => {
+    insertSqlTemplate();
   });
 
   document.getElementById("file-input").addEventListener("change", (e) => {
@@ -458,6 +586,7 @@
       theme: "default",
       securityLevel: "loose",
       flowchart: { useMaxWidth: true, htmlLabels: false, curve: "basis" },
+      er: { useMaxWidth: true },
     });
     updatePreview();
   }
