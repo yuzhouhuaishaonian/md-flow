@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 下载第三方依赖到 vendor/ 目录（需联网）
+# Download third-party dependencies into the vendor/ directory (requires network)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,4 +24,4 @@ download "$CDN/dompurify@3.1.6/dist/purify.min.js"                 "$ROOT/vendor
 download "$CDN/mermaid@10.9.1/dist/mermaid.min.js"                 "$ROOT/vendor/mermaid/mermaid.min.js"
 download "$CDN/jspdf@2.5.1/dist/jspdf.umd.min.js"                  "$ROOT/vendor/jspdf/jspdf.umd.min.js"
 
-echo "完成。依赖已保存到 vendor/"
+echo "Done. Dependencies saved to vendor/"

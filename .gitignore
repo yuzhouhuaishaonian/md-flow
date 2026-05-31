@@ -1,1 +1,21 @@
-/.idea/
+# IDE
+.idea/
+**/.idea/
+
+# macOS / Windows
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+
+# Logs & temp
+*.log
+*.tmp
+*.swp
+

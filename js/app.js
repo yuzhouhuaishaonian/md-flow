@@ -3,32 +3,38 @@
 
   const STORAGE_KEY = "md-flow-content";
 
-  const DEFAULT_MD = `# 系统维护通告
+  const DEFAULT_MD = `# System Maintenance Notice
 
-**发布时间**：2026-05-28
-**影响范围**：全体用户
+**Release time**: 2026-05-28
+**Affected scope**: All users
 
-## 操作流程
+## Operation Flow
 
-1. 发布维护通告
-2. 用户收到通知
-3. 停止写入服务
-4. 执行数据库升级
-5. 升级是否成功？
-6. 成功则恢复服务并通知用户
-7. 失败则执行回滚并告警
+1. Publish maintenance notice
+2. Users receive notification
+3. Stop write service
+4. Run database upgrade
+5. Did the upgrade succeed?
+6. If success, restore service and notify users
+7. If failed, roll back and raise alert
 
-## 注意事项
+## Notes
 
-- 请提前保存未完成的工作
-- 维护期间请勿进行重要操作
-- 如有问题请联系运维值班
+- Please save unfinished work in advance
+- Do not perform critical operations during maintenance
+- Contact the ops on-call team if you have any issues
 `;
 
   let editor;
   let renderTimer;
   let renderLock = Promise.resolve();
-  let currentFlowchart = { source: "", mode: "auto", message: "" };
+  let currentFlowchart = { source: "", extraSources: [], mode: "auto", message: "" };
+
+  const BADGE_LABELS = {
+    auto: "Auto convert",
+    mermaid: "Mermaid",
+    sql: "SQL schema",
+  };
 
   const previewEl = document.getElementById("preview");
   const diagramStatusEl = document.getElementById("diagram-status");
@@ -100,7 +106,7 @@
 
   async function renderMermaidToElement(source, container) {
     if (!container) {
-      throw new Error("找不到流程图渲染容器");
+      throw new Error("Flowchart render container not found");
     }
 
     const run = async () => {
@@ -111,7 +117,7 @@
         return container.querySelector("svg");
       } catch (err) {
         container.innerHTML =
-          `<pre class="render-error">流程图生成失败：\n${escapeHtml(String(err.message || err))}</pre>`;
+          `<pre class="render-error">Failed to generate flowchart:\n${escapeHtml(String(err.message || err))}</pre>`;
         return null;
       }
     };
@@ -120,7 +126,7 @@
     return renderLock;
   }
 
-  function buildPreviewShell(mode, message, source) {
+  function buildPreviewShell(mode, message, sources) {
     previewEl.innerHTML = "";
 
     const bodyWrap = document.createElement("div");
@@ -133,25 +139,45 @@
     const header = document.createElement("div");
     header.className = "flowchart-header";
     header.innerHTML =
-      `<span class="flowchart-badge ${mode}">${mode === "auto" ? "自动转换" : "Mermaid"}</span>` +
+      `<span class="flowchart-badge ${mode}">${BADGE_LABELS[mode] || mode}</span>` +
       `<span class="flowchart-hint">${escapeHtml(message)}</span>`;
 
     const block = document.createElement("div");
     block.className = "mermaid-block";
 
-    const renderTarget = document.createElement("div");
-    renderTarget.className = "flowchart-render-target";
-    block.appendChild(renderTarget);
+    const renderTargets = [];
+    sources.forEach((source, index) => {
+      const panel = document.createElement("div");
+      panel.className = "flowchart-panel";
+
+      if (sources.length > 1) {
+        const title = document.createElement("div");
+        title.className = "flowchart-panel-title";
+        title.textContent = index === 0 ? "Table schema (erDiagram)" : "Indexes & constraints";
+        panel.appendChild(title);
+      }
+
+      const renderTarget = document.createElement("div");
+      renderTarget.className = "flowchart-render-target";
+      panel.appendChild(renderTarget);
+      block.appendChild(panel);
+      renderTargets.push({ renderTarget, source });
+    });
 
     const details = document.createElement("details");
     details.className = "mermaid-source-panel";
+    const sourceText = sources.join("\n\n---\n\n");
     details.innerHTML =
-      `<summary>查看生成的 Mermaid 代码</summary><pre><code>${escapeHtml(source)}</code></pre>`;
+      `<summary>View generated Mermaid code</summary><pre><code>${escapeHtml(sourceText)}</code></pre>`;
 
     flowchartWrap.append(header, block, details);
     previewEl.appendChild(flowchartWrap);
 
-    return { bodyWrap, renderTarget };
+    return { bodyWrap, renderTargets };
+  }
+
+  function getDiagramSources(flowchart) {
+    return [flowchart.source].concat(flowchart.extraSources || []).filter(Boolean);
   }
 
   async function updatePreview() {
@@ -162,10 +188,11 @@
       currentFlowchart = buildFlowchartFromMd(md);
       diagramStatusEl.textContent = currentFlowchart.message;
 
-      const { bodyWrap, renderTarget } = buildPreviewShell(
+      const sources = getDiagramSources(currentFlowchart);
+      const { bodyWrap, renderTargets } = buildPreviewShell(
         currentFlowchart.mode,
         currentFlowchart.message,
-        currentFlowchart.source
+        sources
       );
 
       const bodyHtml = renderMarkdownBody(md);
@@ -175,12 +202,14 @@
         bodyWrap.remove();
       }
 
-      renderTarget.innerHTML = `<p class="render-loading">正在生成流程图…</p>`;
-      await renderMermaidToElement(currentFlowchart.source, renderTarget);
+      for (const item of renderTargets) {
+        item.renderTarget.innerHTML = `<p class="render-loading">Generating flowchart…</p>`;
+        await renderMermaidToElement(item.source, item.renderTarget);
+      }
     } catch (err) {
       previewEl.innerHTML =
-        `<pre class="render-error">预览失败：\n${escapeHtml(String(err.message || err))}</pre>`;
-      diagramStatusEl.textContent = "渲染失败";
+        `<pre class="render-error">Preview failed:\n${escapeHtml(String(err.message || err))}</pre>`;
+      diagramStatusEl.textContent = "Render failed";
     }
   }
 
@@ -203,7 +232,7 @@
   }
 
   function renderMarkdownBody(md) {
-    const bodyMd = md.replace(/```\s*mermaid[\s\S]*?```/gi, "").trim();
+    const bodyMd = MdToFlowchart.stripDiagramContent(md);
     if (!bodyMd) return "";
 
     return marked.parse(bodyMd, { gfm: true, breaks: true });
@@ -211,6 +240,10 @@
 
   function getFlowchartSvg() {
     return previewEl.querySelector(".flowchart-render-target svg");
+  }
+
+  function getAllFlowchartSvgs() {
+    return Array.from(previewEl.querySelectorAll(".flowchart-render-target svg"));
   }
 
   function svgToBlob(svgEl) {
@@ -284,7 +317,7 @@
             canvas.toBlob(
               (blob) => {
                 if (blob) resolve(blob);
-                else reject(new Error("PNG 转换失败"));
+                else reject(new Error("PNG conversion failed"));
               },
               "image/png",
               1
@@ -293,11 +326,11 @@
             reject(e);
           }
         };
-        img.onerror = () => reject(new Error("SVG 转 PNG 失败，请尝试导出 SVG"));
+        img.onerror = () => reject(new Error("Failed to convert SVG to PNG, try exporting SVG instead"));
         img.src = dataUrl;
       }),
       20000,
-      "生成图片超时，请缩小流程图后重试"
+      "Image generation timed out, try reducing the flowchart size and retry"
     );
   }
 
@@ -310,22 +343,9 @@
     return renderMermaidToElement(currentFlowchart.source, offscreenEl);
   }
 
-  async function generateImage(format) {
-    const buttons = {
-      png: document.getElementById("btn-generate"),
-      svg: document.getElementById("btn-export-svg"),
-      pdf: document.getElementById("btn-export-pdf"),
-    };
-    const labels = { png: "生成图片", svg: "SVG", pdf: "PDF" };
-    const loading = { png: "生成中…", svg: "导出中…", pdf: "导出中…" };
-    const btn = buttons[format] || buttons.png;
-
-    Object.values(buttons).forEach((b) => (b.disabled = true));
-    btn.textContent = loading[format] || "处理中…";
-
-    try {
-      currentFlowchart = buildFlowchartFromMd(editor.getValue());
-
+  async function renderAllDiagramsForExport() {
+    const sources = getDiagramSources(currentFlowchart);
+    if (sources.length <= 1) {
       let svg = getFlowchartSvg();
       if (!svg) {
         await updatePreview();
@@ -335,26 +355,94 @@
         offscreenEl.innerHTML = "";
         svg = await renderMermaidToElement(currentFlowchart.source, offscreenEl);
       }
-      if (!svg) {
-        showToast("无法生成流程图，请检查 Markdown 内容");
+      return svg ? [svg] : [];
+    }
+
+    let svgs = getAllFlowchartSvgs();
+    if (svgs.length === sources.length) return svgs;
+
+    await updatePreview();
+    svgs = getAllFlowchartSvgs();
+    if (svgs.length === sources.length) return svgs;
+
+    offscreenEl.innerHTML = "";
+    const rendered = [];
+    for (const source of sources) {
+      const container = document.createElement("div");
+      offscreenEl.appendChild(container);
+      const svg = await renderMermaidToElement(source, container);
+      if (svg) rendered.push(svg);
+    }
+    return rendered;
+  }
+
+  function combineSvgsVertically(svgs, gap) {
+    gap = gap || 24;
+    if (svgs.length === 1) return prepareSvgForExport(svgs[0]);
+
+    const prepared = svgs.map((svg) => prepareSvgForExport(svg));
+    const totalWidth = Math.max(...prepared.map((item) => item.width));
+    const totalHeight =
+      prepared.reduce((sum, item) => sum + item.height, 0) + gap * (prepared.length - 1);
+
+    const combined = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    combined.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    combined.setAttribute("width", String(totalWidth));
+    combined.setAttribute("height", String(totalHeight));
+    combined.setAttribute("viewBox", `0 0 ${totalWidth} ${totalHeight}`);
+
+    let offsetY = 0;
+    prepared.forEach((item) => {
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      group.setAttribute("transform", `translate(${(totalWidth - item.width) / 2}, ${offsetY})`);
+      group.appendChild(item.clone);
+      combined.appendChild(group);
+      offsetY += item.height + gap;
+    });
+
+    return { clone: combined, width: totalWidth, height: totalHeight };
+  }
+
+  async function generateImage(format) {
+    const buttons = {
+      png: document.getElementById("btn-generate"),
+      svg: document.getElementById("btn-export-svg"),
+      pdf: document.getElementById("btn-export-pdf"),
+    };
+    const labels = { png: "Generate image", svg: "SVG", pdf: "PDF" };
+    const loading = { png: "Generating…", svg: "Exporting…", pdf: "Exporting…" };
+    const btn = buttons[format] || buttons.png;
+
+    Object.values(buttons).forEach((b) => (b.disabled = true));
+    btn.textContent = loading[format] || "Processing…";
+
+    try {
+      currentFlowchart = buildFlowchartFromMd(editor.getValue());
+
+      const svgs = await renderAllDiagramsForExport();
+      if (svgs.length === 0) {
+        showToast("Unable to generate flowchart, please check the Markdown content");
         return;
       }
 
+      const combined = combineSvgsVertically(svgs);
+      const exportSvg = combined.clone;
+
       const ts = getTimestamp();
       if (format === "png") {
-        const blob = await svgToPng(svg, 2);
+        const blob = await svgToPng(exportSvg, 2);
         downloadBlob(blob, `flowchart-${ts}.png`);
-        showToast("已生成并下载 PNG 图片");
+        showToast("PNG image generated and downloaded");
       } else if (format === "svg") {
-        downloadBlob(svgToBlob(svg), `flowchart-${ts}.svg`);
-        showToast("已导出 SVG 图片");
+        downloadBlob(svgToBlob(exportSvg), `flowchart-${ts}.svg`);
+        showToast("SVG image exported");
       } else if (format === "pdf") {
         const { jsPDF } = window.jspdf;
-        const pngBlob = await svgToPng(svg, 2);
+        const pngBlob = await svgToPng(exportSvg, 2);
         const dataUrl = await new Promise((res, rej) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result);
-          reader.onerror = () => rej(new Error("读取图片失败"));
+          reader.onerror = () => rej(new Error("Failed to read image"));
           reader.readAsDataURL(pngBlob);
         });
 
@@ -375,10 +463,10 @@
         const y = (pageH - imgH) / 2;
         pdf.addImage(dataUrl, "PNG", x, y, imgW, imgH);
         pdf.save(`flowchart-${ts}.pdf`);
-        showToast("已导出 PDF");
+        showToast("PDF exported");
       }
     } catch (err) {
-      showToast("生成失败：" + (err.message || err));
+      showToast("Generation failed: " + (err.message || err));
     } finally {
       Object.entries(buttons).forEach(([key, b]) => {
         b.disabled = false;
@@ -389,7 +477,7 @@
 
   function saveMarkdown() {
     downloadText(editor.getValue(), `document-${getTimestamp()}.md`, "text/markdown;charset=utf-8");
-    showToast("已保存 Markdown 文件");
+    showToast("Markdown file saved");
   }
 
   function loadMarkdownFile(file) {
@@ -397,7 +485,7 @@
     reader.onload = function (e) {
       editor.setValue(e.target.result);
       updatePreview();
-      showToast(`已打开：${file.name}`);
+      showToast(`Opened: ${file.name}`);
     };
     reader.readAsText(file, "UTF-8");
   }
@@ -434,9 +522,49 @@
   document.getElementById("btn-export-svg").addEventListener("click", () => generateImage("svg"));
   document.getElementById("btn-export-pdf").addEventListener("click", () => generateImage("pdf"));
   document.getElementById("btn-save-md").addEventListener("click", saveMarkdown);
+  const SQL_TABLE_MD = `# users Table Example
+
+A demo user table used to test SQL -> erDiagram auto conversion.
+
+\`\`\`sql
+CREATE TABLE \`users\` (
+  \`id\` int NOT NULL AUTO_INCREMENT,
+  \`username\` varchar(50) NOT NULL COMMENT 'login name',
+  \`email\` varchar(100) NOT NULL COMMENT 'user email',
+  \`status\` varchar(20) NOT NULL DEFAULT 'active' COMMENT 'active / inactive',
+  \`role\` varchar(20) NOT NULL DEFAULT 'member' COMMENT 'admin / member',
+  \`created_at\` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (\`id\`) USING BTREE,
+  UNIQUE KEY \`users_idx_email\` (\`email\`) USING BTREE,
+  KEY \`users_idx_status_role\` (\`status\`, \`role\`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Demo user table for diagram preview';
+\`\`\`
+`;
+
+  async function insertSqlTemplate() {
+    try {
+      const resp = await fetch("examples/sample-table.md");
+      if (resp.ok) {
+        editor.setValue(await resp.text());
+        updatePreview();
+        showToast("Table schema example loaded");
+        return;
+      }
+    } catch (err) {
+      // Fall back to the built-in example when using file:// or offline
+    }
+    editor.setValue(SQL_TABLE_MD);
+    updatePreview();
+    showToast("Table schema example loaded");
+  }
+
   document.getElementById("btn-insert-template").addEventListener("click", () => {
     editor.setValue(DEFAULT_MD);
     updatePreview();
+  });
+  document.getElementById("btn-insert-sql-template").addEventListener("click", () => {
+    insertSqlTemplate();
   });
 
   document.getElementById("file-input").addEventListener("change", (e) => {
@@ -451,13 +579,14 @@
   const missing = checkDependencies();
   if (missing.length > 0) {
     previewEl.innerHTML =
-      `<pre class="render-error">依赖库加载失败：${missing.join("、")}\n请检查网络连接后刷新页面（Cmd+Shift+R）。</pre>`;
+      `<pre class="render-error">Failed to load dependencies: ${missing.join(", ")}\nPlease check your network connection and refresh the page (Cmd+Shift+R).</pre>`;
   } else {
     mermaid.initialize({
       startOnLoad: false,
       theme: "default",
       securityLevel: "loose",
       flowchart: { useMaxWidth: true, htmlLabels: false, curve: "basis" },
+      er: { useMaxWidth: true },
     });
     updatePreview();
   }

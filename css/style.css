@@ -342,6 +342,25 @@ body {
   color: #2f5fbf;
 }
 
+.flowchart-badge.sql {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.flowchart-panel + .flowchart-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.flowchart-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
+}
+
 .flowchart-hint {
   font-size: 13px;
   color: #5c677d;

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MD 流程图 · Markdown 转图片</title>
+  <title>MD Flowchart · Markdown to Image</title>
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="vendor/codemirror/lib/codemirror.min.css" />
   <link rel="stylesheet" href="vendor/codemirror/theme/material-darker.min.css" />
@@ -11,15 +11,15 @@
 <body>
   <header class="header">
     <div class="header-left">
-      <h1>MD 流程图</h1>
-      <span class="subtitle">输入 Markdown → 自动生成流程图 → 下载图片</span>
+      <h1>MD Flowchart</h1>
+      <span class="subtitle">Enter Markdown → Auto-generate flowchart → Download image</span>
     </div>
     <div class="header-actions">
-      <label class="btn btn-ghost" for="file-input">打开 .md</label>
+      <label class="btn btn-ghost" for="file-input">Open .md</label>
       <input id="file-input" type="file" accept=".md,.markdown,.txt" hidden />
-      <button class="btn btn-ghost" id="btn-save-md" type="button">保存 .md</button>
+      <button class="btn btn-ghost" id="btn-save-md" type="button">Save .md</button>
       <div class="divider"></div>
-      <button class="btn btn-primary" id="btn-generate" type="button">生成图片</button>
+      <button class="btn btn-primary" id="btn-generate" type="button">Generate image</button>
       <button class="btn btn-ghost" id="btn-export-svg" type="button">SVG</button>
       <button class="btn btn-ghost" id="btn-export-pdf" type="button">PDF</button>
     </div>
@@ -28,8 +28,9 @@
   <main class="workspace">
     <section class="panel editor-panel">
       <div class="panel-header">
-        <span>Markdown 编辑</span>
-        <button class="btn-link" id="btn-insert-template" type="button">插入示例</button>
+        <span>Markdown Editor</span>
+        <button class="btn-link" id="btn-insert-template" type="button">Flowchart example</button>
+        <button class="btn-link" id="btn-insert-sql-template" type="button">Table schema example</button>
       </div>
       <div id="editor"></div>
     </section>
@@ -38,8 +39,8 @@
 
     <section class="panel preview-panel">
       <div class="panel-header">
-        <span>预览</span>
-        <span class="diagram-count" id="diagram-status">等待输入</span>
+        <span>Preview</span>
+        <span class="diagram-count" id="diagram-status">Waiting for input</span>
       </div>
       <div class="preview-wrap">
         <article id="preview" class="preview-content"></article>
@@ -56,7 +57,7 @@
   <script src="vendor/dompurify/purify.min.js"></script>
   <script src="vendor/mermaid/mermaid.min.js"></script>
   <script src="vendor/jspdf/jspdf.umd.min.js"></script>
-  <script src="js/md-to-flowchart.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/md-to-flowchart.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

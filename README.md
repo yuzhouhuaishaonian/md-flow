@@ -1,10 +1,10 @@
-# MD 流程图 · Markdown 转图片
+# MD Flowchart · Markdown to Image
 
-在本机运行的工具：**输入 Markdown 文档，自动生成流程图并下载为 PNG / SVG / PDF**。
+A locally-run tool: **enter a Markdown document, auto-generate a flowchart, and download it as PNG / SVG / PDF**.
 
-无需 Node.js，无需 Docker。Python 仅用于启动本地静态服务。**JS 依赖已内置在 `vendor/`，可完全离线使用。**
+No Node.js required, no Docker required. Python is only used to start a local static server. **JS dependencies are bundled in `vendor/`, so it works fully offline.**
 
-## 快速启动
+## Quick Start
 
 ```bash
 cd md-flow
@@ -12,67 +12,81 @@ chmod +x start.sh
 ./start.sh
 ```
 
-浏览器打开：**http://localhost:8080**
+Open in your browser: **http://localhost:8080**
 
-也可以指定端口：
+You can also specify a port:
 
 ```bash
 ./start.sh 3000
 ```
 
-## 使用方式
+On Windows you can use the bundled scripts instead:
 
-1. 在左侧输入或粘贴 Markdown
-2. 右侧自动生成流程图预览
-3. 点击 **生成图片** 下载 PNG（也支持 SVG、PDF）
-
-### Markdown 示例
-
-```markdown
-# 系统维护通告
-
-## 操作流程
-
-1. 发布维护通告
-2. 用户收到通知
-3. 执行数据库升级
-4. 升级是否成功？
-5. 成功则恢复服务
-6. 失败则执行回滚
+```bat
+start.bat
 ```
 
-若文档中包含 ` ```mermaid ` 代码块，将直接使用该代码生成图片。
+Or run the Node.js server directly:
 
-## 转换规则
+```bash
+node start.js
+```
 
-| Markdown 元素 | 流程图表现 |
-|---------------|------------|
-| `# 标题` | 起始节点 |
-| `## 小节标题` | 分组节点 |
-| `1. 2. 3.` 编号列表 | 按顺序连接的步骤 |
-| 含「是否」「?」的步骤 | 菱形判断节点 |
+## Usage
 
-## 目录结构
+1. Enter or paste Markdown on the left
+2. The flowchart preview is generated automatically on the right
+3. Click **Generate image** to download a PNG (SVG and PDF are also supported)
+
+### Markdown Example
+
+```markdown
+# System Maintenance Notice
+
+## Operation Flow
+
+1. Publish maintenance notice
+2. Users receive notification
+3. Run database upgrade
+4. Did the upgrade succeed?
+5. If success, restore service
+6. If failed, roll back
+```
+
+If the document contains a ` ```mermaid ` code block, that code is used directly to generate the image.
+
+## Conversion Rules
+
+| Markdown element | Flowchart representation |
+|------------------|--------------------------|
+| `# Title` | Start node |
+| `## Section title` | Group node |
+| `1. 2. 3.` numbered list | Steps connected in order |
+| Steps with "?" / words like "whether", "if" | Diamond decision node |
+
+## Directory Structure
 
 ```
 md-flow/
 ├── index.html
 ├── css/style.css
 ├── js/
-│   ├── md-to-flowchart.js   # Markdown → 流程图
-│   └── app.js               # 渲染与导出
-├── vendor/                  # 本地 JS/CSS 依赖（离线可用）
+│   ├── md-to-flowchart.js   # Markdown -> flowchart
+│   └── app.js               # rendering and export
+├── vendor/                  # local JS/CSS dependencies (offline-ready)
 │   ├── codemirror/
 │   ├── marked/
 │   ├── dompurify/
 │   ├── mermaid/
 │   ├── jspdf/
-│   └── download.sh          # 重新下载依赖
-└── start.sh                 # 启动脚本（python -m http.server）
+│   └── download.sh          # re-download dependencies
+├── start.sh                 # start script (python -m http.server)
+├── start.bat                # Windows start script (Node.js / Python)
+└── start.js                 # Node.js static server
 ```
 
-## 说明
+## Notes
 
-- **完全离线**：依赖已下载到 `vendor/`，无需联网
-- 如需更新依赖：`chmod +x vendor/download.sh && ./vendor/download.sh`
-- 建议使用 Chrome / Edge 浏览器
+- **Fully offline**: dependencies are downloaded into `vendor/`, no network needed
+- To update dependencies: `chmod +x vendor/download.sh && ./vendor/download.sh`
+- Chrome / Edge browsers are recommended

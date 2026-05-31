@@ -4,4 +4,4 @@ DOMPurify 3.1.6
 Mermaid 10.9.1
 jsPDF 2.5.1
 
-重新下载: ./vendor/download.sh
+Re-download: ./vendor/download.sh
