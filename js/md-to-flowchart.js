@@ -174,10 +174,16 @@
       .filter(Boolean);
   }
 
+  // Mermaid erDiagram attribute types cannot contain commas (e.g. decimal(20,4)),
+  // so collapse the comma inside the precision so the diagram still parses.
+  function mermaidSafeType(type) {
+    return type.replace(/\(\s*(\d+)\s*,\s*(\d+)\s*\)/g, "($1_$2)");
+  }
+
   function simplifyColumnType(rawType) {
     const base = rawType.replace(/\s+/g, " ").trim();
     const match = base.match(/^(\w+(?:\([^)]*\))?)/i);
-    return match ? match[1].toLowerCase() : base.toLowerCase();
+    return mermaidSafeType(match ? match[1].toLowerCase() : base.toLowerCase());
   }
 
   function parseCreateTable(sql) {
@@ -385,6 +391,10 @@
     }
 
     text = text.trim();
+
+    if (/^erDiagram\b/im.test(text)) {
+      text = mermaidSafeType(text);
+    }
 
     if (!new RegExp("^(" + MERMAID_DIAGRAM_TYPES + ")\\b", "im").test(text)) {
       if (/(\w+\[|\w+\{|-->)/.test(text)) {
