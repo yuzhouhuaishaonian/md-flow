@@ -2,7 +2,7 @@
 
 A locally-run tool: **enter a Markdown document, auto-generate a flowchart, and download it as PNG / SVG / PDF**.
 
-No Node.js required, no Docker required. Python is only used to start a local static server. **JS dependencies are bundled in `vendor/`, so it works fully offline.**
+The startup script only runs a local static server: on Windows, `start.bat` works with either Node.js or Python (whichever is installed); on Linux/macOS, `start.sh` requires Python. **JS dependencies are bundled in `vendor/`, so it works fully offline.**
 
 ## Quick Start
 
